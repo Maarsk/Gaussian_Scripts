@@ -1,0 +1,152 @@
+import re
+import sys
+from logging import exception
+
+try:
+    #inputfilename = sys.argv[1]
+    filename = 'GasPhase_S0_Fac_PBE1.out'
+
+except:
+    print(' Command Line Argument Not Found or Missing')
+    print('')
+    sys.exit()
+
+
+def extract_gaussian_energy(file_path, variable):
+    last_energy = []
+    if variable == 0:
+        energy_pattern = re.compile(r"SCF Done:\s+E\(\w+\)\s+=\s+(-?\d+\.\d+)")
+    elif variable == 1:
+        energy_pattern = re.compile(r"Total Energy, E\(TD-HF/TD-DFT\)\s*=\s*(-?\d+\.\d+)")
+    with open(file_path, 'r', errors='ignore') as f:
+        for line in f:
+            match = energy_pattern.search(line)
+            if match:
+                last_energy.append(float(match.group(1)))
+
+    if last_energy is None:
+        raise ValueError("No SCF energy found in file.")
+
+    return last_energy
+
+
+def energy_pattern(file_path):
+    pattern = re.compile(r"Total Energy.*?=\s*(-?\d+\.\d+)")
+    with open(file_path, 'r', errors='ignore') as f:
+        for line in f:
+            if pattern.search(line):
+                return 1
+    return 0
+
+
+atomic_symbols = {
+    1: "H", 2: "He",
+    3: "Li", 4: "Be", 5: "B", 6: "C", 7: "N", 8: "O", 9: "F", 10: "Ne",
+    11: "Na", 12: "Mg", 13: "Al", 14: "Si", 15: "P", 16: "S", 17: "Cl", 18: "Ar",
+    19: "K", 20: "Ca", 21: "Sc", 22: "Ti", 23: "V", 24: "Cr", 25: "Mn", 26: "Fe",
+    27: "Co", 28: "Ni", 29: "Cu", 30: "Zn", 31: "Ga", 32: "Ge", 33: "As", 34: "Se",
+    35: "Br", 36: "Kr", 37: "Rb", 38: "Sr", 39: "Y", 40: "Zr", 41: "Nb", 42: "Mo",
+    43: "Tc", 44: "Ru", 45: "Rh", 46: "Pd", 47: "Ag", 48: "Cd", 49: "In", 50: "Sn",
+    51: "Sb", 52: "Te", 53: "I", 54: "Xe", 55: "Cs", 56: "Ba", 57: "La", 58: "Ce",
+    59: "Pr", 60: "Nd", 61: "Pm", 62: "Sm", 63: "Eu", 64: "Gd", 65: "Tb", 66: "Dy",
+    67: "Ho", 68: "Er", 69: "Tm", 70: "Yb", 71: "Lu", 72: "Hf", 73: "Ta", 74: "W",
+    75: "Re", 76: "Os", 77: "Ir", 78: "Pt", 79: "Au", 80: "Hg", 81: "Tl", 82: "Pb",
+    83: "Bi", 84: "Po", 85: "At", 86: "Rn", 87: "Fr", 88: "Ra", 89: "Ac", 90: "Th",
+    91: "Pa", 92: "U", 93: "Np", 94: "Pu", 95: "Am", 96: "Cm", 97: "Bk", 98: "Cf",
+    99: "Es", 100: "Fm", 101: "Md", 102: "No", 103: "Lr", 104: "Rf", 105: "Db", 106: "Sg",
+    107: "Bh", 108: "Hs", 109: "Mt", 110: "Ds", 111: "Rg", 112: "Cn", 113: "Nh", 114: "Fl",
+    115: "Mc", 116: "Lv", 117: "Ts", 118: "Og"
+}
+
+#filename = sys.argv[1]
+
+pattern = re.compile(r"Standard orientation:")
+opt_pattern = re.compile(r"Optimization completed.")
+energies = extract_gaussian_energy(filename, energy_pattern(filename))
+
+geometries = []
+opt_geometries = []
+opt_energies = []
+opt = False
+with open(filename, 'r') as f:
+    lines = f.readlines()
+j = 0
+i = 0
+while i < len(lines):
+    if opt_pattern.search(lines[i]):
+        try:
+            opt_energies.append(energies[j])
+        except Exception as error:
+            print(error)
+            break
+        opt = True
+    if pattern.search(lines[i]):
+        i += 5
+        block = []
+        while i < len(lines) and not re.match(r'\s*-{5,}\s*', lines[i]):
+            try:
+                parts = lines[i].split()
+                if len(parts) == 6:
+                    center, atomic_num, atomic_type, x, y, z = parts
+                    block.append({
+                        "center": int(center),
+                        "atomic_symbol": atomic_symbols[int(atomic_num)],
+                        "atomic_type": int(atomic_type),
+                        "x": float(x),
+                        "y": float(y),
+                        "z": float(z)
+                    })
+                i += 1
+            except ValueError:
+                print(f"Error parsing line {i}: {lines[i]}")
+                break
+        j += 1
+        geometries.append(block)  # ← correct place
+        if opt == True:
+            opt_geometries.append(block)
+            opt = False
+        i += 1
+    else:
+        i += 1
+
+i = 0
+with open((filename.strip(".out") + "_movie.xyz"), 'w') as f:
+    for block in geometries:
+        f.write(str(len(block)) + '\n')
+        try:
+            f.write(f"Energy: {energies[i]}\n")
+        except IndexError:
+            f.write(f"Energy: {energies[i - 1]}\n")
+        i += 1
+        for atom in block:
+            f.write(
+                f"{atom['atomic_symbol']:<3}"
+                f"{atom['x']:>12.6f}"
+                f"{atom['y']:>12.6f}"
+                f"{atom['z']:>12.6f}\n"
+            )
+
+i = 0
+with open((filename.strip(".out") + "_MINmovie.xyz"), 'w') as f:
+    for block in opt_geometries:
+        f.write(str(len(block)) + '\n')
+        try:
+            f.write(f"Energy: {opt_energies[i]}\n")
+        except IndexError:
+            f.write(f"Energy: {opt_energies[i - 1]}\n")
+        i += 1
+        for atom in block:
+            f.write(
+                f"{atom['atomic_symbol']:<3}"
+                f"{atom['x']:>12.6f}"
+                f"{atom['y']:>12.6f}"
+                f"{atom['z']:>12.6f}\n"
+            )
+try:
+    numenergies = len(energies)
+    print('Successfully read ' + str(numenergies) + ' energies from the Gaussian Output file')
+    opt_numenergies = len(opt_energies)
+    print(f'Found {opt_numenergies} Stationary Points')
+
+except:
+    print('Found zero energies')
