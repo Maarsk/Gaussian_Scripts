@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+
+import re
+import csv
+import sys
+import os
+
+try:
+    #inputfilename = sys.argv[1]
+    inputfilename = 'PCM-DCM_S0toS1_Fac_PBE_200states.out'
+except:
+    print(' Command Line Argument Not Found or Missing')
+    print('')
+    sys.exit()
+
+state_header_re = re.compile(
+    r"Excited State\s+(\d+):.*?([\d.]+)\s+eV\s+([\d.]+)\s+nm\s+f=([\d.]+)"
+)
+transition_re = re.compile(r"(\d+)\s*->\s*(\d+)\s*(-?(?:\d*\.\d+|\d+))")
+try:
+    with open(inputfilename, "r") as f:
+        lines = f.readlines()
+        start_indices = [
+            i for i, line in enumerate(lines)
+            if "Excitation energies and oscillator strengths" in line
+        ]
+
+        if not start_indices:
+            raise ValueError("Excitation energies not found")
+
+        start_idx = start_indices[-1]
+        block = lines[start_idx:]
+
+        results = []
+        current_state = None
+
+        for line in block:
+            header_match = state_header_re.search(line)
+            if header_match:
+                if current_state:
+                    results.append(current_state)
+
+                current_state = {
+                    "State": int(header_match.group(1)),
+                    "Energy_eV": float(header_match.group(2)),
+                    "Wavelength_nm": float(header_match.group(3)),
+                    "OscillatorStrength_f": float(header_match.group(4)),
+                    "Transitions": [],
+                    "Contributions": []
+                }
+
+            elif current_state:
+                t_match = transition_re.findall(line)
+                if t_match:
+                    for (a, b, c) in t_match:
+                        current_state["Transitions"].append(f"{a}->{b}")
+                        current_state["Contributions"].append(c)
+
+        if current_state:
+            results.append(current_state)
+
+        name, ext = os.path.splitext(inputfilename)
+
+        with open("TDoscillations_" + name + '.csv', "w", newline="") as csvfile:
+            fieldnames = ["State", "Energy_eV", "Wavelength_nm", "OscillatorStrength_f", "Transitions"]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in results:
+                pairs = [f"{t}:{c}" for t, c in zip(r["Transitions"], r["Contributions"])]
+                writer.writerow({
+                    "State": r["State"],
+                    "Energy_eV": r["Energy_eV"],
+                    "Wavelength_nm": r["Wavelength_nm"],
+                    "OscillatorStrength_f": r["OscillatorStrength_f"],
+                    "Transitions": ";".join(pairs)
+                })
+except Exception as e:
+    print(f"Error processing {inputfilename}: {e}")
+print(f'{len(results)} excited states found in {name}')
+print(f'Extraction complete, results saved to TDoscillations_{inputfilename.strip(".out")}.csv')
+
