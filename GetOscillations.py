@@ -6,8 +6,8 @@ import sys
 import os
 
 try:
-    #inputfilename = sys.argv[1]
-    inputfilename = 'PCM-DCM_S0toS1_Fac_PBE_200states.out'
+    inputfilename = sys.argv[1]
+
 except:
     print(' Command Line Argument Not Found or Missing')
     print('')

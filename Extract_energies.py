@@ -30,7 +30,8 @@ for filename in os.listdir(input_folder):
                 energy_pattern = re.compile(r"Total Energy.*?=\s*(-?\d+\.\d+)")
                 match = energy_pattern.search(line)
                 if match:
-                    break
+                    print(f"Found energy pattern in {filename}")
+                    #break
                 energy_pattern = re.compile(r"SCF Done:\s+E\(.*?\)\s+=\s+(-?\d+\.\d+)")
         last_energy = None
         last_free_energy = None
