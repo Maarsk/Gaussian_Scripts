@@ -1,0 +1,142 @@
+#!/usr/bin/env python
+
+import sys
+import re
+import pandas as pd
+
+atomic_symbols = {
+    1: "H", 2: "He",
+    3: "Li", 4: "Be", 5: "B", 6: "C", 7: "N", 8: "O", 9: "F", 10: "Ne",
+    11: "Na", 12: "Mg", 13: "Al", 14: "Si", 15: "P", 16: "S", 17: "Cl", 18: "Ar",
+    19: "K", 20: "Ca", 21: "Sc", 22: "Ti", 23: "V", 24: "Cr", 25: "Mn", 26: "Fe",
+    27: "Co", 28: "Ni", 29: "Cu", 30: "Zn", 31: "Ga", 32: "Ge", 33: "As", 34: "Se",
+    35: "Br", 36: "Kr", 37: "Rb", 38: "Sr", 39: "Y", 40: "Zr", 41: "Nb", 42: "Mo",
+    43: "Tc", 44: "Ru", 45: "Rh", 46: "Pd", 47: "Ag", 48: "Cd", 49: "In", 50: "Sn",
+    51: "Sb", 52: "Te", 53: "I", 54: "Xe", 55: "Cs", 56: "Ba", 57: "La", 58: "Ce",
+    59: "Pr", 60: "Nd", 61: "Pm", 62: "Sm", 63: "Eu", 64: "Gd", 65: "Tb", 66: "Dy",
+    67: "Ho", 68: "Er", 69: "Tm", 70: "Yb", 71: "Lu", 72: "Hf", 73: "Ta", 74: "W",
+    75: "Re", 76: "Os", 77: "Ir", 78: "Pt", 79: "Au", 80: "Hg", 81: "Tl", 82: "Pb",
+    83: "Bi", 84: "Po", 85: "At", 86: "Rn", 87: "Fr", 88: "Ra", 89: "Ac", 90: "Th",
+    91: "Pa", 92: "U", 93: "Np", 94: "Pu", 95: "Am", 96: "Cm", 97: "Bk", 98: "Cf",
+    99: "Es", 100: "Fm", 101: "Md", 102: "No", 103: "Lr", 104: "Rf", 105: "Db", 106: "Sg",
+    107: "Bh", 108: "Hs", 109: "Mt", 110: "Ds", 111: "Rg", 112: "Cn", 113: "Nh", 114: "Fl",
+    115: "Mc", 116: "Lv", 117: "Ts", 118: "Og"
+}
+
+try:
+    filename = sys.argv[1]
+
+except:
+    print(' Command Line Argument Not Found or Missing')
+    print('')
+    sys.exit()
+    
+def extract_first_mode(filename):
+    with open(filename, "r") as f:
+        lines = f.readlines()
+
+    # 1. Find the first displacement table header
+    start = None
+    for i, line in enumerate(lines):
+        if re.match(r"\s*Atom\s+AN\s+X\s+Y\s+Z", line):
+            start = i + 1
+            break
+
+    if start is None:
+        raise ValueError("Could not find displacement table header")
+
+    atoms = []
+
+    # 2. Read until the next "Frequencies --" line
+    for line in lines[start:]:
+        if "Frequencies --" in line:
+            break  # end of this mode block
+
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+
+        # Skip header-like lines
+        if parts[0] in ("X", "Y", "Z"):
+            continue
+
+        # Try parsing atom index and atomic number
+        try:
+            atom_index = int(parts[0])
+            atomic_number = int(parts[1])
+        except ValueError:
+            continue
+
+        # Extract ONLY the first mode (first X Y Z triplet)
+        x = float(parts[2])
+        y = float(parts[3])
+        z = float(parts[4])
+
+        atoms.append([atom_index, atomic_number, x, y, z])
+
+    df = pd.DataFrame(atoms, columns=["Index", "uma", "X", "Y", "Z"])
+    return df
+
+def extract_last_geometry(filename):
+    j = 0
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        start = None
+        for i,line in enumerate(lines):
+            if opt_pattern.search(line):
+                start = i + 1
+                break
+        for i, line in enumerate(lines[start:]):
+            if pattern.search(line):
+                start = start + i + 1
+                break
+        atoms = []
+        for line in lines[start:]:
+            if end_pattern.search(line):
+                j += 1
+                if j == 3:
+                    break
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            if len(parts) == 6 and j == 2:
+                try:
+                    atom_index = int(parts[0])
+                    atom = atomic_symbols[int(parts[1])]
+                    x = float(parts[3])
+                    y = float(parts[4])
+                    z = float(parts[5])
+                except ValueError:
+                    print(f"Error parsing line {i}: {lines[i]}")
+                    break
+                atoms.append([atom_index, atom, x, y, z])
+        df = pd.DataFrame(atoms, columns=["Index", "uma", "X", "Y", "Z"])
+        return df
+
+def write_xyz(df, filename, comment=""):
+    with open(filename, "w") as f:
+        f.write(f"{len(df)}\n")
+        f.write(f"{comment}\n")
+        for _, row in df.iterrows():
+            atom = row["Atom"]
+            x = float(row["X"])
+            y = float(row["Y"])
+            z = float(row["Z"])
+            f.write(f"{atom:<2s} {x:12.6f} {y:12.6f} {z:12.6f}\n")
+
+k = 2
+
+pattern = re.compile(r"Standard orientation:")
+end_pattern = re.compile(r'\s*-{5,}\s*')
+opt_pattern = re.compile(r"Optimization completed.")
+
+displacement = extract_first_mode(filename)
+geometry = extract_last_geometry(filename)
+
+new_geometry_plus = pd.DataFrame({"Atom" : geometry["uma"], "X" : geometry["X"] + k*displacement["X"], "Y" : geometry["Y"] + k*displacement["Y"], "Z" : geometry["Z"] + k*displacement["Z"]})
+new_geometry_minus = pd.DataFrame({"Atom" : geometry["uma"], "X" : geometry["X"] - k*displacement["X"], "Y" : geometry["Y"] - k*displacement["Y"], "Z" : geometry["Z"] - k*displacement["Z"]})
+
+write_xyz(new_geometry_plus, filename.strip(".out") + "_plus.xyz", "Plus")
+write_xyz(new_geometry_minus, filename.strip(".out") + "_minus.xyz", "Minus")
+
+print("Operation completed")
