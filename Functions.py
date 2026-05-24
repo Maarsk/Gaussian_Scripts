@@ -21,3 +21,10 @@ def read_xyz(filename):
             coords.append([x, y, z])
             elements.append(parts[0])
     return np.array(coords), np.array(elements)
+def write_xyz(filename, symbols, coords, comment=""):
+    n = len(symbols)
+    with open(filename, "w") as f:
+        f.write(f"{n}\n")
+        f.write(comment + "\n")
+        for sym, (x, y, z) in zip(symbols, coords):
+            f.write(f"{sym:2s}  {x:15.8f}  {y:15.8f}  {z:15.8f}\n")

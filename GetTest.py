@@ -1,10 +1,10 @@
 import re
 import sys
-from logging import exception
+import os
 
 try:
     #inputfilename = sys.argv[1]
-    filename = 'GasPhase_S0_Fac_PBE1.out'
+    filename = os.path.join(os.getcwd(),"Input","out_to_info","Fac_DCM_S0_CAMB3LYP.out")
 
 except:
     print(' Command Line Argument Not Found or Missing')
@@ -15,9 +15,9 @@ except:
 def extract_gaussian_energy(file_path, variable):
     last_energy = []
     if variable == 0:
-        energy_pattern = re.compile(r"SCF Done:\s+E\(\w+\)\s+=\s+(-?\d+\.\d+)")
+        energy_pattern = re.compile(r"SCF Done:\s+E\(.*?\)\s+=\s+(-?\d+\.\d+)")
     elif variable == 1:
-        energy_pattern = re.compile(r"Total Energy, E\(TD-HF/TD-DFT\)\s*=\s*(-?\d+\.\d+)")
+        energy_pattern = re.compile(r"Total Energy.*?=\s*(-?\d+\.\d+)")
     with open(file_path, 'r', errors='ignore') as f:
         for line in f:
             match = energy_pattern.search(line)
